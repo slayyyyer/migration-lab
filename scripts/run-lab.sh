@@ -13,6 +13,11 @@
 # A scenario marked EXPECTED_FAIL=true passes only when it is actually caught.
 set -uo pipefail
 
+# CI annotations are the only failure detail readable without credentials, so an
+# unexpected failure states the exact command and line that caused it.
+set -o errtrace
+trap 'printf "::error::run-lab failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND"' ERR
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
