@@ -13,8 +13,17 @@ mkdir -p "$target"
 
 marker="$target/flyway-bin"
 if [ -s "$marker" ] && [ -e "$(cat "$marker")" ]; then
-  echo "flyway $FLYWAY_VERSION already present at $(cat "$marker")"
-  exit 0
+  case "$(cat "$marker")" in
+    *.cmd)
+      case "$(uname -s)" in
+        MINGW* | MSYS* | CYGWIN*) echo "flyway $FLYWAY_VERSION already present at $(cat "$marker")"; exit 0 ;;
+        # A Windows launcher recorded here is unusable on this platform; fall through and
+        # pick the right one rather than failing with "Permission denied" at run time.
+        *) echo "ignoring the Windows launcher recorded at $(cat "$marker")" ;;
+      esac
+      ;;
+    *) echo "flyway $FLYWAY_VERSION already present at $(cat "$marker")"; exit 0 ;;
+  esac
 fi
 
 case "$(uname -s)-$(uname -m)" in
@@ -42,7 +51,17 @@ case "$archive" in
 esac
 rm -f "$archive"
 
-binary="$(find "$target" -maxdepth 3 -type f \( -name flyway -o -name flyway.cmd \) | head -1)"
+# Choose the launcher for this platform explicitly. The archives can carry both, and
+# `find ... | head -1` returns directory order, so the Windows `flyway.cmd` can win on
+# Linux — where executing it fails with "Permission denied" and every scenario fails.
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) launcher="flyway.cmd" ;;
+  *) launcher="flyway" ;;
+esac
+binary="$(find "$target" -maxdepth 3 -type f -name "$launcher" | head -1)"
+if [ -z "$binary" ]; then
+  binary="$(find "$target" -maxdepth 3 -type f \( -name flyway -o -name flyway.cmd \) | head -1)"
+fi
 if [ -z "$binary" ]; then
   echo "downloaded Flyway ${FLYWAY_VERSION} but found no launcher in $target" >&2
   exit 1

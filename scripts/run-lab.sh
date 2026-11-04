@@ -292,7 +292,7 @@ echo
 echo "report written to $OUT"
 jq -r '.scenarios[] | "\(.id)  \(.status)\t\(.title)"' "$OUT" 2>/dev/null || head -c 400 "$OUT"
 
-if grep -q '"status": "fail"' "$OUT" 2>/dev/null || grep -q '"status": "not-caught"' "$OUT" 2>/dev/null; then
+if ! jq -e '[.scenarios[] | select(.status == "fail" or .status == "not-caught")] | length == 0' "$OUT" >/dev/null 2>&1; then
   echo "one or more scenarios failed" >&2
   exit 1
 fi
