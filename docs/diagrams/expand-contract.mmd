@@ -1,0 +1,37 @@
+%% The shape every scenario in this lab follows.
+%% Editable source: keep the diagram next to the migrations it describes.
+flowchart LR
+  subgraph expand["1. expand"]
+    direction TB
+    e1["add nullable column<br/>or new table<br/>metadata-only"]
+    e2["dual-write trigger<br/>both shapes stay correct"]
+    e1 --> e2
+  end
+
+  subgraph migrate["2. migrate"]
+    direction TB
+    m1["backfill in batches<br/>5,000 rows per transaction"]
+    m2["previous release query<br/>still works"]
+    m1 --> m2
+  end
+
+  subgraph contract["3. contract"]
+    direction TB
+    c1["drop trigger<br/>drop old column"]
+    c2["set NOT NULL<br/>via validated CHECK"]
+    c1 --> c2
+  end
+
+  old["old release<br/>reads and writes<br/>the old shape"] --> expand
+  expand --> migrate
+  migrate --> contract
+  contract --> new["new release<br/>reads and writes<br/>the new shape"]
+
+  old -. "never broken" .-> new
+
+  subgraph never["what is never done"]
+    direction TB
+    bad1["ALTER COLUMN TYPE<br/>rewrites under ACCESS EXCLUSIVE"]
+    bad2["CREATE INDEX<br/>blocks every writer"]
+    bad3["RENAME COLUMN<br/>breaks every instance at once"]
+  end

@@ -1,0 +1,97 @@
+name: migration-lab
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  SCALE: "200000"
+  FLYWAY_VERSION: "13.12.0"
+
+jobs:
+  lab:
+    name: run every scenario
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Flyway's CLI is Java-based; the migrations themselves use no Java.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Ensure psql and jq are available
+        run: |
+          command -v psql >/dev/null || sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          command -v jq >/dev/null
+
+      - name: Install Flyway CLI (pinned)
+        run: ./scripts/get-flyway.sh
+
+      - name: Run every scenario
+        env:
+          PGURL: postgresql://postgres:postgres@localhost:5432/postgres
+          FLYWAY_BIN: ./.tools/flyway-13.12.0/flyway
+          SCALE: ${{ env.SCALE }}
+          OUT: dist/data/report.json
+        run: ./scripts/run-lab.sh
+
+      - name: Assemble the report site
+        if: always()
+        run: |
+          mkdir -p dist/data
+          cp -r site/. dist/
+          touch dist/.nojekyll
+          if [ ! -f dist/data/report.json ]; then
+            echo '{"scenarios":[],"error":"the lab did not produce a report"}' >dist/data/report.json
+          fi
+          jq -n \
+            --arg commit "${GITHUB_SHA}" \
+            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg runUrl "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            '{commit: $commit, generatedAt: $generatedAt, runUrl: $runUrl}' >/tmp/manifest.json
+          printf 'window.LAB = %s;\n' "$(cat /tmp/manifest.json)" >dist/data/manifest.js
+          ls -R dist | head -30
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: deploy pages
+    needs: lab
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
