@@ -1,0 +1,5 @@
+.tools/
+.work/
+dist/
+*.log
+.DS_Store
