@@ -17,7 +17,9 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
 PGURL="${PGURL:-postgresql://postgres:postgres@localhost:5432/postgres}"
-FLYWAY="${FLYWAY_BIN:-$root/.tools/flyway-13.12.0/flyway}"
+# FLYWAY_BIN may name the launcher directly, or the file get-flyway.sh writes.
+FLYWAY="${FLYWAY_BIN:-$root/.tools/flyway-bin}"
+if [ -f "$FLYWAY" ]; then FLYWAY="$(cat "$FLYWAY")"; fi
 PSQL="${PSQL_BIN:-psql}"
 SCALE="${SCALE:-200000}"
 OUT="${OUT:-dist/data/report.json}"
@@ -247,6 +249,10 @@ for dir in "${scenario_dirs[@]}"; do
     if [ "$backcompat_done" = "0" ] && [ -f "$dir/previous-queries.sql" ]; then
       notes="${notes}backward-compat probe never ran; "
     fi
+  fi
+
+  if [ "$status" != "pass" ] && [ "$status" != "caught" ]; then
+    printf '::error::scenario %s (%s): %s\n' "$ID" "$status" "${notes:-no detail}"
   fi
 
   printf '   %s (%s ms max writer latency, budget %s ms)\n' "$status" "$max_lock" "$LOCK_BUDGET_MS"

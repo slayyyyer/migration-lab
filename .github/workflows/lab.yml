@@ -56,7 +56,6 @@ jobs:
       - name: Run every scenario
         env:
           PGURL: postgresql://postgres:postgres@localhost:5432/postgres
-          FLYWAY_BIN: ./.tools/flyway-13.12.0/flyway
           SCALE: ${{ env.SCALE }}
           OUT: dist/data/report.json
         run: ./scripts/run-lab.sh
