@@ -16,7 +16,7 @@ set -uo pipefail
 # CI annotations are the only failure detail readable without credentials, so an
 # unexpected failure states the exact command and line that caused it.
 set -o errtrace
-trap 'printf "::error::run-lab failed at line %s: %s\n" "$LINENO" "$BASH_COMMAND"' ERR
+trap 'printf "::error::run-lab: command exited non-zero at line %s: %s\n" "$LINENO" "$BASH_COMMAND"' ERR
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
@@ -138,9 +138,10 @@ for dir in "${scenario_dirs[@]}"; do
 
   # Fingerprint before the change. checks.sql is mode-aware: before stores, after compares.
   if ! psql_db "$url" -v mode=before -f "$dir/checks.sql" >.work/checks-before.log 2>&1; then
+    precheck_message="$(grep -oE 'ERROR:  .*' .work/checks-before.log | head -1 | sed 's/ERROR:  //' | tr -d "'" | cut -c1-160)"
     fail "pre-check failed for $ID"; tail -20 .work/checks-before.log
     assertions_ok=0
-    notes="${notes}pre-check failed; "
+    notes="${notes}pre-check failed: ${precheck_message:-no detail}; "
   fi
 
   # Concurrent writer: latency is the user-visible measure of lock contention.
@@ -151,7 +152,9 @@ for dir in "${scenario_dirs[@]}"; do
   (
     while [ -f "$probe_flag" ]; do
       started=$(date +%s%3N)
-      "$PSQL" "$url" -q -c "set lock_timeout='5s'; update orders set updated_at = now() where id = (select id from orders limit 1)" >/dev/null 2>&1
+      # A probe that loses the race to an ACCESS EXCLUSIVE lock is the measurement this
+      # scenario wants, not a script error, so the non-zero exit is swallowed deliberately.
+      "$PSQL" "$url" -q -c "set lock_timeout='5s'; update orders set updated_at = now() where id = (select id from orders limit 1)" >/dev/null 2>&1 || true
       finished=$(date +%s%3N)
       printf '%s\n' "$((finished - started))" >>"$latency_file"
       sleep 0.05

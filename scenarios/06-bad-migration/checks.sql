@@ -31,8 +31,8 @@ begin
       raise exception 'order row count changed';
     end if;
 
-    select data_type into data_type from information_schema.columns
-     where table_name = 'orders' and column_name = 'total_cents';
+    select c.data_type into data_type from information_schema.columns c
+     where c.table_name = 'orders' and c.column_name = 'total_cents';
     if data_type = 'numeric' then
       raise exception 'REJECTED: total_cents was rewritten in place to numeric while holding ACCESS EXCLUSIVE; use the shadow-column pattern from scenario 03';
     end if;

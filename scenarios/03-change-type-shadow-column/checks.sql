@@ -35,8 +35,8 @@ begin
       raise exception 'total_cents is null after the swap';
     end if;
 
-    select data_type into data_type from information_schema.columns
-     where table_name = 'orders' and column_name = 'total_cents';
+    select c.data_type into data_type from information_schema.columns c
+     where c.table_name = 'orders' and c.column_name = 'total_cents';
     if data_type is distinct from 'numeric' then
       raise exception 'total_cents should be numeric, found %', data_type;
     end if;
